@@ -15,8 +15,13 @@
 #include <string>
 #include <time.h>
 #include <vector>
+
 using namespace std;
 
+/*
+ * A very simple client application used to test out the server.  It just captures input from the
+ * command line and sends it to the server.
+ */
 int main (int argc, char* argv[])
 {
     int listenFd, portNo;
@@ -26,7 +31,7 @@ int main (int argc, char* argv[])
 
     if(argc < 3)
     {
-        cerr<<"Syntax : ./client <host name> <port>"<<endl;
+        cerr<<"Usage : ./client <host name> <port>"<<endl;
         return 0;
     }
 
@@ -34,11 +39,11 @@ int main (int argc, char* argv[])
 
     if((portNo > 65535) || (portNo < 2000))
     {
-        cerr<<"Please enter port number between 2000 - 65535"<<endl;
+        cerr<<"Enter a port number between 2000 - 65535"<<endl;
         return 0;
     }
 
-    //create client skt
+    // create client socket
     listenFd = socket(AF_INET, SOCK_STREAM, 0);
 
     if(listenFd < 0)
@@ -70,12 +75,10 @@ int main (int argc, char* argv[])
         return 0;
     }
 
-    //send stuff to server
+    // send stuff to server
     for(;;)
     {
         char s[300];
-        //cin.clear();
-        //cin.ignore(256, '\n');
         cout << "Enter stuff: ";
         bzero(s, 301);
         cin.getline(s, 300);

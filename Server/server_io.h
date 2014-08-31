@@ -2,7 +2,7 @@
  * serverio.h
  *
  *  Created on: Aug 23, 2014
- *      Author: root
+ *      Author: sorton
  */
 
 #ifndef SERVERIO_H_
@@ -17,9 +17,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <pthread.h>
-#include <iostream>
-#include <fstream>
-#include <string>
 #include <vector>
 
 
@@ -53,7 +50,6 @@ private:
 
 	int _portId;
 	int _listenFd;
-	socklen_t _slen;
 	struct sockaddr_in _servAdd;
 	bool _running;
 };

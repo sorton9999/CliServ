@@ -1,12 +1,12 @@
 /*
- * serverio.cpp
+ * server_io.cpp
  *
  *  Created on: Aug 23, 2014
- *      Author: root
+ *      Author: sorton
  */
 
 #include <signal.h>
-#include <fcntl.h>
+#include <iostream>
 #include "server_io.h"
 
 using namespace std;
@@ -18,17 +18,30 @@ const int server_io::MINPORT = 2000;
 const int server_io::MAXPORT = 65535;
 const int server_io::LISTEN_BACKLOG = 10;
 
+/*
+ * Constructor
+ */
 server_io::server_io()
-: _slen(0), _listenFd(0), _portId(0), _running(false)
+: _listenFd(0), _portId(0), _running(false)
 {
 	// TODO Auto-generated constructor stub
 }
 
+/*
+ * Destructor
+ */
 server_io::~server_io() {
 	// TODO Auto-generated destructor stub
 	close(_listenFd);
 }
 
+/*
+ * Instance -- This class follows the singleton pattern so this is
+ *             the public method to get a pointer to the class.
+ * INPUTS: VOID
+ * OUTPUTS: VOID
+ * RETURN: server_io -- A pointer to this class
+ */
 server_io* server_io::Instance()
 {
 	if (_instance == NULL)
@@ -36,6 +49,13 @@ server_io* server_io::Instance()
 	return _instance;
 }
 
+/*
+ * SetupSocket -- Set up the port connection, open a socket and
+ *                listen.
+ * INPUTS: int -- The port to connect with
+ * OUPUTS: VOID
+ * RETURN: bool -- The success or failure of this operation
+ */
 bool server_io::SetupSocket(int port)
 {
 	_portId = port;
@@ -77,10 +97,22 @@ bool server_io::SetupSocket(int port)
 	return true;
 }
 
+/*
+ * Start -- Starts the applications main processing loop.  The loop runs until
+ *          the flag '_running' is set to FALSE in a signal handler.  A select
+ *          is set up to detect incoming activity on the '_listenFd' FD.  Once
+ *          something comes in, an 'accept' is performed.  Once the connection
+ *          to the client is made, a thread is spawned for the client and the
+ *          thread ID is put into a class storage data structure.
+ * INPUTS: VOID
+ * OUTPUTS: VOID
+ * RETURN: VOID
+ */
 void server_io::Start()
 {
 	fd_set readset;
 	int result = -1;
+	socklen_t slen = 0;
 	struct timeval tv;
 
 	while (_running)
@@ -93,9 +125,8 @@ void server_io::Start()
 		if (result > 0)
 		{
 			struct sockaddr_in clntAdd;
-			_slen = sizeof(clntAdd);
-			//cout << "Accepting New Clients." << endl;
-			int connFd = accept(_listenFd, (struct sockaddr*)&clntAdd, &_slen);
+			slen = sizeof(clntAdd);
+			int connFd = accept(_listenFd, (struct sockaddr*)&clntAdd, &slen);
 			if (connFd < 0)
 			{
 				perror("Client Connection");
@@ -114,13 +145,31 @@ void server_io::Start()
 	CleanUp();
 }
 
+/*
+ * Stop -- The stop method that sets some class flags to exit out of the main
+ *         loop and the client loops.
+ * INPUTS: VOID
+ * OUTPUTS: VOID
+ * RETURN: VOID
+ */
 void server_io::Stop()
 {
 	cout << "Stopping Server Listening on FD: " << _listenFd << endl;
+	// stop the main loop
 	_running = false;
+	// stop all client loops
 	_loop = false;
 }
 
+/*
+ * CleanUp -- Cleanup some connections and client threads before processing
+ *            stops.  A 'join' is called for each client thread so it will
+ *            return gracefully and stop.  A thread kill is called in case
+ *            the thread doesn't stop gracefully.
+ * INPUTS: VOID
+ * OUTPUTS: VOID
+ * RETURN: VOID
+ */
 void server_io::CleanUp()
 {
 	cout << "Cleaning up Server resources." << endl;
@@ -143,6 +192,16 @@ void server_io::CleanUp()
 	}
 }
 
+/*
+ * SignalSetup -- A thread safe signal setup method used to register
+ *                signals for that the application will honor when
+ *                sent.  The signals SIGTERM and SIGINT are registered
+ *                to help the application stop (such as hitting <CTRL-C>
+ *                in the terminal window.
+ * INPUTS: *handler -- A function pointer to the signal handler
+ * OUTPUTS: VOID
+ * RETURN: bool -- Whether or not this operation was successful
+ */
 bool server_io::SignalSetup(void (*handler)(int))
 {
 	struct sigaction sa;
@@ -166,6 +225,20 @@ bool server_io::SignalSetup(void (*handler)(int))
 	return true;
 }
 
+/*
+ * ClientReadTask -- The client thread processing method.  In the loop two flags are
+ *                   checked.  A local flag that gets set to FALSE when the client
+ *                   send an 'exit' command and a class level flag that is set to
+ *                   FALSE when the server is stopping.  A 'select' is set up to
+ *                   detect when something is coming in the the client FD.  When
+ *                   something comes in, a 'read' is done to get what comes in.  The
+ *                   string is just echoed out to STDOUT.
+ * INPUTS: void* -- A pointer to input args which needs to be cast to its real type. In
+ *                  this case, the client connection FD.
+ * OUPUTS: VOID
+ * RETURN: void* -- Any return needed to be sent to the caller.  In this case, a message
+ *                  string.
+ */
 void* server_io::ClientReadTask(void* arg)
 {
 	int clientFd = *((int*)arg);
@@ -183,7 +256,7 @@ void* server_io::ClientReadTask(void* arg)
 		tv.tv_sec = 0;
 		tv.tv_usec = 10000;
 		int result = select(clientFd + 1, &readset, NULL, NULL, &tv);
-		if (result > 0)
+		if (result > 0 && _loop && lloop)
 		{
 			read(clientFd, test, 300);
 
