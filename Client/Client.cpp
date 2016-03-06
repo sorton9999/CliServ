@@ -28,11 +28,31 @@ int main (int argc, char* argv[])
     bool loop = false;
     struct sockaddr_in svrAdd;
     struct hostent *server;
+    string filename = "";
+    ifstream *fs = NULL;
+    ostringstream s_str;
+    istringstream i_str;
 
     if(argc < 3)
     {
-        cerr<<"Usage : ./client <host name> <port>"<<endl;
+        cerr<<"Usage : ./client <host name> <port> [filename]"<<endl;
         return 0;
+    }
+    else if (argc == 4)
+    {
+    	filename = argv[(argc-1)];
+    	fs = new ifstream(filename.c_str());
+
+//    	int n = 5;
+//    	if (filename.find_last_of("2") != string::npos)
+//    	{
+//    		while (n > 0)
+//    		{
+//    			cout << "." << flush;
+//    			sleep(1);
+//    			--n;
+//    		}
+//    	}
     }
 
     portNo = atoi(argv[2]);
@@ -78,15 +98,33 @@ int main (int argc, char* argv[])
     // send stuff to server
     for(;;)
     {
-        char s[300];
-        cout << "Enter stuff: ";
-        bzero(s, 301);
-        cin.getline(s, 300);
+        string s = "";
 
-        write(listenFd, s, strlen(s));
+        if ((filename.length() > 0) && fs->is_open())
+        {
+        	while (!fs->eof())
+        	{
+        		(*fs) >> s;
+        		write(listenFd, s.c_str(), s.length());
+        		s = "";
+        		sleep(1);
+        	}
+        	write(listenFd, "exit", 4);
+        	cout << "Auto Exit" << endl;
+        	break;
+        }
+        else
+        {
+        	cout << "Enter stuff: ";
+        	getline(cin, s);
+            write(listenFd, s.c_str(), s.length());
+        }
     }
     cout << "Exiting.." << endl;
     close(listenFd);
+    fs->close();
+    delete fs;
+    fs = NULL;
 }
 
 
