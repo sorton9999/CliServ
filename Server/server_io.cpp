@@ -262,7 +262,7 @@ void* server_io::ClientReadTask(void* arg)
 
 			cout << clientFd << ": " << test << endl;
 
-			if (string(test).compare("exit") == 0)
+			if (string(test).compare("exit") == 0 || string(test).length() == 0)
 				lloop = false;
 
 			memset((void*)&test, 0, sizeof(test));
