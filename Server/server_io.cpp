@@ -140,6 +140,13 @@ void server_io::Start()
 			{
 				client_store.push_back(threadId);
 			}
+
+            sleep(1);
+            // Send a ready out to the client
+            if (send (connFd, "READY", 5, 0) < 0)
+            {
+                perror("send to client");
+            }
 		}
 	}
 	CleanUp();
@@ -178,17 +185,23 @@ void server_io::CleanUp()
 		 ++iter)
 	{
 		char* msg = NULL;
+        bool killThread = false;
 		if (pthread_join(*iter, (void**)&msg))
 		{
 			perror("pthread_join");
+            killThread = true;
 		}
 		cout << msg << endl;
 		delete msg;
-		cout << "Killing Thread: " << *iter << endl;
-		if (pthread_kill(*iter, 0) == 0)
-		{
-			cout << "\n\tKilled." << endl;
-		}
+
+        if (killThread)
+        {
+		    cout << "Killing Thread: " << *iter << endl;
+		    if (pthread_kill(*iter, 0) == 0)
+		    {
+			    cout << "\n\tKilled." << endl;
+		    }
+        }
 	}
 }
 
@@ -245,7 +258,8 @@ void* server_io::ClientReadTask(void* arg)
 	pthread_t myId = pthread_self();
 	cout << "Start Thread No: " << myId << endl;
 	char test[300];
-	memset((void*)&test, 0, sizeof(test));
+    size_t bufLen = sizeof(test);
+	memset((void*)&test, 0, bufLen);
 	bool lloop = true;
 	fd_set readset;
 	struct timeval tv;
@@ -258,14 +272,16 @@ void* server_io::ClientReadTask(void* arg)
 		int result = select(clientFd + 1, &readset, NULL, NULL, &tv);
 		if (result > 0 && _loop && lloop)
 		{
-			read(clientFd, test, 300);
+			read(clientFd, test, bufLen);
 
 			cout << clientFd << ": " << test << endl;
 
-			if (string(test).compare("exit") == 0 || string(test).length() == 0)
+			if (string(test).compare(0, 4, "exit") == 0)
+            {
+                cout << ">>>> Received EXIT From Client: " << clientFd << endl;
 				lloop = false;
-
-			memset((void*)&test, 0, sizeof(test));
+            }
+			memset((void*)&test, 0, bufLen);
 		}
 	}
 	close(clientFd);
@@ -273,5 +289,4 @@ void* server_io::ClientReadTask(void* arg)
 	sprintf(msg, "Closing Thread No: %lu, Client FD: %d", myId, clientFd);
 	return msg;
 }
-
 
