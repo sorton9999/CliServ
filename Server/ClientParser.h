@@ -8,15 +8,15 @@
 #ifndef CLIENTPARSER_H_
 #define CLIENTPARSER_H_
 
-#include "client_interface.h"
+#include "thread_interface.h"
 
-class ClientParser: public client_interface {
+class ClientParser: public thread_interface {
 public:
 	ClientParser();
 	virtual ~ClientParser();
 
 protected:
-	virtual void* ClientReactor(void);
+	virtual void* ThreadReactor(void);
 
 private:
 	bool _loop;
