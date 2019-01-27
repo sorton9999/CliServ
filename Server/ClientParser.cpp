@@ -28,7 +28,7 @@ ClientParser::~ClientParser()
 	// TODO Auto-generated destructor stub
 }
 
-void* ClientParser::ClientReactor(void)
+void* ClientParser::ThreadReactor(void)
 {
 	int clientFd = *((int*)_args);
 	pthread_t myId = pthread_self();
