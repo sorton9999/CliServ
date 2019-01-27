@@ -5,34 +5,46 @@
  *      Author: sorton
  */
 
+//#include <cstdio>
 #include <signal.h>
 #include <iostream>
 #include "server_io.h"
+//#include "TcpService.h"
+//#include "UdpService.h"
 
 using namespace std;
+using namespace service_if;
 
 
 server_io* server_io::_instance = NULL;
 bool server_io::_loop = true;
-const int server_io::MINPORT = 2000;
-const int server_io::MAXPORT = 65535;
-const int server_io::LISTEN_BACKLOG = 10;
 
 /*
  * Constructor
  */
-server_io::server_io()
-: _listenFd(0), _portId(0), _running(false)
+server_io::server_io(int port, std::string host)
 {
-	// TODO Auto-generated constructor stub
+	_listenFd = 0;
+	_portId = port;
+	_running = false;
+	_service = NULL;
+	_hostname = host;
+	_parser = new ClientParser();
 }
 
 /*
  * Destructor
  */
-server_io::~server_io() {
-	// TODO Auto-generated destructor stub
-	close(_listenFd);
+server_io::~server_io()
+{
+	close (_listenFd);
+	if (_service != NULL)
+		delete _service;
+	_service = NULL;
+	close (_udpFd);
+	if (_udpService != NULL)
+		delete _udpService;
+	_udpService = NULL;
 }
 
 /*
@@ -42,59 +54,46 @@ server_io::~server_io() {
  * OUTPUTS: VOID
  * RETURN: server_io -- A pointer to this class
  */
-server_io* server_io::Instance()
+server_io* server_io::Instance(int port, std::string host)
 {
 	if (_instance == NULL)
-		_instance = new server_io();
+		_instance = new server_io(port, host);
 	return _instance;
 }
 
 /*
  * SetupSocket -- Set up the port connection, open a socket and
  *                listen.
- * INPUTS: int -- The port to connect with
+ * INPUTS: VOID
  * OUPUTS: VOID
  * RETURN: bool -- The success or failure of this operation
  */
-bool server_io::SetupSocket(int port)
+bool server_io::SetupSocket(void)
 {
-	_portId = port;
-
-	// Check value of port
-	if ((_portId > MAXPORT) || (_portId < MINPORT))
+	if (_service == NULL)
 	{
-		cerr << "Port Value Not Within Limits: " << _portId << endl;
-		return false;
+		_service = new service_if::TcpService(service_if::TcpService::CONN_SERVER, "", _portId);
 	}
+	_running = _service->SetupSocket();
+	return _running;
+}
 
-	// Create socket
-	_listenFd = socket(AF_INET, SOCK_STREAM, 0);
-	if (_listenFd < 0)
+/*
+ * SetupUdpService -- Set up the service-side UDP socket connection.
+ *
+ * INPUTS: VOID
+ * OUTPUTS: VOID
+ * RETURN: bool -- The success or failure of this operation
+ */
+bool server_io::SetupUdpService()
+{
+	if (_udpService == NULL)
 	{
-		perror("Cannot Open socket");
-		return false;
+		_udpPort = _portId;
+		_udpService = new UdpService(UdpService::CONN_SERVER, _hostname, _udpPort);
 	}
-
-	memset((void*) &_servAdd, 0, sizeof(_servAdd));
-	_servAdd.sin_family = AF_INET;
-	_servAdd.sin_addr.s_addr = INADDR_ANY;
-	_servAdd.sin_port = htons(_portId);
-
-	// Bind socket
-	if (bind(_listenFd, (struct sockaddr*)&_servAdd, sizeof(_servAdd)) < 0)
-	{
-		perror("Cannot Bind");
-		return false;
-	}
-
-	// Listen for client connections
-	if (listen(_listenFd, LISTEN_BACKLOG) < 0)
-	{
-		perror("Listen Error");
-		return false;
-	}
-	_running = true;
-	return true;
+	_udpRunning = _udpService->SetupSocket();
+	return _udpRunning;
 }
 
 /*
@@ -110,46 +109,66 @@ bool server_io::SetupSocket(int port)
  */
 void server_io::Start()
 {
-	fd_set readset;
+	struct sockaddr* clntAdd = new sockaddr();
 	int result = -1;
-	socklen_t slen = 0;
 	struct timeval tv;
 
 	while (_running)
 	{
-		FD_ZERO(&readset);
-		FD_SET(_listenFd, &readset);
 		tv.tv_sec = 0;
 		tv.tv_usec = 10000;
-		result = select(_listenFd + 1, &readset, NULL, NULL, &tv);
+		result = _service->ServiceLoop(&tv);
 		if (result > 0)
 		{
-			struct sockaddr_in clntAdd;
-			slen = sizeof(clntAdd);
-			int connFd = accept(_listenFd, (struct sockaddr*)&clntAdd, &slen);
+			int connFd = _service->AcceptConnection(clntAdd);
 			if (connFd < 0)
 			{
 				perror("Client Connection");
 			}
 			else
 			{
-				cout << "Connection to FD: " + connFd << endl;
+				std::cout << "Connection to FD: " + connFd << std::endl;
 			}
 			pthread_t threadId = 0;
-			if (_running && pthread_create(&threadId, NULL, server_io::ClientReadTask, &connFd) == 0)
+			if ((_parser != NULL) && _parser->StartThread(&connFd))
 			{
-				client_store.push_back(threadId);
+				client_store.push_back(_parser->ThreadId());
 			}
+			//if (_running && pthread_create(&threadId, NULL, server_io::ClientReadTask, &connFd) == 0)
+			//{
+			//	client_store.push_back(threadId);
+			//}
 
-            sleep(1);
-            // Send a ready out to the client
-            if (send (connFd, "READY", 5, 0) < 0)
-            {
-                perror("send to client");
-            }
+			sleep(1);
+			// Send a ready out to the client
+			//if (send (connFd, "READY", 5, 0) < 0)
+			if (_service->SendMsg("READY") < 0)
+			{
+				perror("send to client");
+			}
 		}
 	}
+	delete clntAdd;
+	clntAdd = NULL;
 	CleanUp();
+}
+
+void server_io::StartUdpService()
+{
+	int result = -1;
+	struct timeval tv;
+
+	while (_udpRunning)
+	{
+		tv.tv_sec = 0;
+		tv.tv_usec = 10000;
+		result = _udpService->ServiceLoop(&tv);
+		if (result > 0)
+		{
+			string msg = _udpService->GetMsg();
+			cout << "Msg: " << msg << endl;
+		}
+	}
 }
 
 /*
@@ -161,9 +180,10 @@ void server_io::Start()
  */
 void server_io::Stop()
 {
-	cout << "Stopping Server Listening on FD: " << _listenFd << endl;
+	std::cout << "Stopping Server Listening on FD: " << _listenFd << std::endl;
 	// stop the main loop
 	_running = false;
+	_udpRunning = false;
 	// stop all client loops
 	_loop = false;
 }
@@ -179,27 +199,29 @@ void server_io::Stop()
  */
 void server_io::CleanUp()
 {
-	cout << "Cleaning up Server resources." << endl;
-	for (vector<pthread_t>::iterator iter = client_store.begin();
+	std::cout << "Cleaning up Server resources." << std::endl;
+	for (std::vector<pthread_t>::iterator iter = client_store.begin();
 		 iter != client_store.end();
 		 ++iter)
 	{
 		char* msg = NULL;
         bool killThread = false;
-		if (pthread_join(*iter, (void**)&msg))
+		//if (pthread_join(*iter, (void**)&msg))
+        if (_parser->WaitForThread((void**)&msg))
 		{
 			perror("pthread_join");
             killThread = true;
 		}
-		cout << msg << endl;
+		std::cout << msg << std::endl;
 		delete msg;
 
         if (killThread)
         {
-		    cout << "Killing Thread: " << *iter << endl;
-		    if (pthread_kill(*iter, 0) == 0)
+		    std::cout << "Killing Thread: " << *iter << std::endl;
+		    //if (pthread_kill(*iter, 0) == 0)
+		    if (_parser->KillThread())
 		    {
-			    cout << "\n\tKilled." << endl;
+			    std::cout << "\n\tKilled." << std::endl;
 		    }
         }
 	}
@@ -256,29 +278,30 @@ void* server_io::ClientReadTask(void* arg)
 {
 	int clientFd = *((int*)arg);
 	pthread_t myId = pthread_self();
-	cout << "Start Thread No: " << myId << endl;
+	std::cout << "Start Thread No: " << myId << std::endl;
 	char test[300];
     size_t bufLen = sizeof(test);
 	memset((void*)&test, 0, bufLen);
 	bool lloop = true;
 	fd_set readset;
 	struct timeval tv;
+	FD_ZERO(&readset);
 	while (_loop && lloop)
 	{
-		FD_ZERO(&readset);
 		FD_SET(clientFd, &readset);
 		tv.tv_sec = 0;
 		tv.tv_usec = 10000;
 		int result = select(clientFd + 1, &readset, NULL, NULL, &tv);
 		if (result > 0 && _loop && lloop)
 		{
-			read(clientFd, test, bufLen);
+			size_t rNum = read(clientFd, test, bufLen);
 
-			cout << clientFd << ": " << test << endl;
+			//std::cout << clientFd << ": [" << rNum << "]: " << test << std::endl;
+			printf("%d : [%d]: %s\n", clientFd, rNum, test);
 
-			if (string(test).compare(0, 4, "exit") == 0)
+			if (std::string(test).compare(0, 4, "exit") == 0)
             {
-                cout << ">>>> Received EXIT From Client: " << clientFd << endl;
+                std::cout << ">>>> Received EXIT From Client: " << clientFd << std::endl;
 				lloop = false;
             }
 			memset((void*)&test, 0, bufLen);

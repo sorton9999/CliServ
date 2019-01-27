@@ -8,31 +8,26 @@
 #ifndef SERVERIO_H_
 #define SERVERIO_H_
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <pthread.h>
 #include <vector>
 
+#include "TcpService.h"
+#include "UdpService.h"
+#include "ClientParser.h"
 
 class server_io {
 public:
-	static const int MAXPORT;
-	static const int MINPORT;
-	static const int LISTEN_BACKLOG;
 
 	virtual ~server_io();
-	static server_io* Instance();
+	static server_io* Instance(int port, std::string host);
 
-	bool SetupSocket(int port);
+	bool SetupSocket(void);
 	void Start();
 	void Stop();
 	void CleanUp();
+
+	bool SetupUdpService();
+	void StartUdpService();
 
 	static void* ClientReadTask(void* arg);
 	static bool SignalSetup(void (*handler)(int));
@@ -40,18 +35,33 @@ public:
 protected:
 	std::vector<pthread_t> client_store;
 
-	server_io();
+	server_io(int port, std::string host);
+
+	//bool SetupUdpSocket();
 
 	static void ClientHandler(int signum);
 
 private:
-	static server_io* _instance;
-	static bool _loop;
 
-	int _portId;
-	int _listenFd;
-	struct sockaddr_in _servAdd;
-	bool _running;
+	// TCP vars
+	int                _portId;
+	std::string        _hostname;
+	int                _listenFd;
+	//struct sockaddr_in _servAdd;
+	bool               _running;
+	service_if::TcpService* _service;
+
+	// UDP vars
+	int _udpPort;
+	int _udpFd;
+	bool _udpRunning;
+	service_if::UdpService* _udpService;
+
+	ClientParser* _parser;
+
+	static server_io*    _instance;
+	static bool          _loop;
+
 };
 
 #endif /* SERVERIO_H_ */

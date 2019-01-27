@@ -1,11 +1,11 @@
 #include <string.h>
 #include <cstring>
-#include <unistd.h>
+//#include <unistd.h>
 #include <stdio.h>
-#include <netdb.h>
+//#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
+//#include <netinet/in.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -16,11 +16,17 @@
 #include <time.h>
 #include <vector>
 
+#include "TcpService.h"
+#include "UdpService.h"
 
 bool ServerReady(int fd);
 
+// Using TCP or UDP
+bool startTCP = false;
+bool startUDP = false;
 
 using namespace std;
+using namespace service_if;
 
 /*
  * A very simple client application used to test out the server.  It just captures input from the
@@ -28,14 +34,13 @@ using namespace std;
  */
 int main (int argc, char* argv[])
 {
-    int listenFd, portNo;
-    struct sockaddr_in svrAdd;
-    struct hostent *server;
+    int portNo = 0;
     fstream* inFile = NULL;
+    bool connected = false;
 
-    if(argc < 3)
+    if(argc < 4)
     {
-        cerr<<"Usage : ./client <host name> <port> [read file]"<<endl;
+        cerr<<"Usage : ./client <host name> <port> <-T|-U> [read file]"<<endl;
         return -1;
     }
 
@@ -47,43 +52,49 @@ int main (int argc, char* argv[])
         return -1;
     }
 
-    // create client socket
-    listenFd = socket(AF_INET, SOCK_STREAM, 0);
-
-    if(listenFd < 0)
+    if (strcmp(argv[3], "-T") == 0)
     {
-        cerr << "Cannot open socket" << endl;
-        return -1;
+    	startTCP = true;
+    }
+    else if (strcmp(argv[3], "-U") == 0)
+    {
+    	startUDP = true;
     }
 
-    server = gethostbyname(argv[1]);
-
-    if(server == NULL)
+    TcpService* service = NULL;
+    if (startTCP)
     {
-        cerr << "Host does not exist" << endl;
-        return -1;
+		service = new TcpService(TcpService::CONN_CLIENT, argv[1], portNo);
+
+		if (service != NULL)
+		{
+			if (service->SetupClient())
+			{
+				connected = service->ClientConnect();
+			}
+		}
     }
 
-    bzero((char *) &svrAdd, sizeof(svrAdd));
-    svrAdd.sin_family = AF_INET;
-
-    bcopy((char *) server -> h_addr, (char *) &svrAdd.sin_addr.s_addr, server -> h_length);
-
-    svrAdd.sin_port = htons(portNo);
-
-    int checker = connect(listenFd,(struct sockaddr *) &svrAdd, sizeof(svrAdd));
-
-    if (checker < 0)
+    UdpService* udpService = NULL;
+    if (startUDP)
     {
-        cerr << "Cannot connect!  No Server?" << endl;
-        return -1;
+    	udpService = new UdpService(UdpService::CONN_CLIENT, argv[1], portNo);
+
+    	if (udpService != NULL)
+    	{
+    		if (udpService->SetupSocket())
+    		{
+    			connected = true;
+    		}
+    	}
     }
+
 
     // Grab the contents of the file given as an argument
     // Since this is optional, we check for existence first
     if (argc >= 4)
     {
-        char* fileCmd = argv[3];
+        char* fileCmd = argv[4];
         if (fileCmd != NULL)
         {
             inFile = new fstream(fileCmd);
@@ -91,6 +102,15 @@ int main (int argc, char* argv[])
     }
 
     // We wait until the server says it's READY.
+    int listenFd = 0;
+    if (connected && startTCP)
+    {
+    	listenFd = service->ListenFd();
+    }
+    else if (connected && startUDP)
+    {
+    	listenFd = udpService->ListenFd();
+    }
     while (!ServerReady(listenFd));
 
     cout << "Server is ready.  Continuing..." << endl;
@@ -110,9 +130,20 @@ int main (int argc, char* argv[])
             if (len > 0)
             {
                 cout << "Sending: [" << input << "]" << endl;
-                if (write(listenFd, input, len) < 0)
+                if (startTCP)
                 {
-                    perror("client write");
+					if (write(listenFd, input, len) < 0)
+					{
+						perror("client tcp write");
+					}
+                }
+                else if (startUDP)
+                {
+                	string str(input);
+                	if (udpService->SendMsg(str) < 0)
+                	{
+                		perror("client udp write");
+                	}
                 }
                 usleep(10000);
             }
@@ -130,15 +161,27 @@ int main (int argc, char* argv[])
             bzero(input, 256);
             cin.getline(input, 256);
 
-            if (write(listenFd, input, strlen(input)) < 0)
+            if (startTCP)
             {
-                perror("client write");
+				if (write(listenFd, input, strlen(input)) < 0)
+				{
+					perror("client tcp write");
+				}
+            }
+            else if (startUDP)
+            {
+            	string str(input);
+            	if (udpService->SendMsg(str) < 0)
+            	{
+            		perror("client udp write");
+            	}
             }
         }
     }
-    cout << "Exiting.." << endl;
+    cout << "Bye. Bye." << endl;
     close(listenFd);
     delete(inFile);
+    delete(service);
 }
 
 bool ServerReady(int fd)
@@ -150,10 +193,16 @@ bool ServerReady(int fd)
         return false;
     }
 
+    if (startUDP)
+    {
+    	return true;
+    }
+
     char buf[100];
     if (recv(fd, buf, 100, 0) < 0)
     {
         perror ("recv from server");
+        sleep(100);
         return false;
     }
     else
