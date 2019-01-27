@@ -29,6 +29,10 @@ server_io::server_io(int port, std::string host)
 	_running = false;
 	_service = NULL;
 	_hostname = host;
+	_udpPort = 0;
+	_udpService = NULL;
+	_udpRunning = false;
+	_udpFd = 0;
 	_parser = new ClientParser();
 }
 
@@ -127,9 +131,10 @@ void server_io::Start()
 			}
 			else
 			{
-				std::cout << "Connection to FD: " + connFd << std::endl;
+				//std::cout << "Connection to FD: " + connFd << std::endl;
+				printf("%s%d\n", "Connection to FD:", connFd);
 			}
-			pthread_t threadId = 0;
+			//pthread_t threadId = 0;
 			if ((_parser != NULL) && _parser->StartThread(&connFd))
 			{
 				client_store.push_back(_parser->ThreadId());
@@ -141,10 +146,11 @@ void server_io::Start()
 
 			sleep(1);
 			// Send a ready out to the client
-			//if (send (connFd, "READY", 5, 0) < 0)
-			if (_service->SendMsg("READY") < 0)
+			if (send (connFd, "READY", 5, 0) < 0)
+			//if (_service->SendMsg("READY") < 0)
 			{
 				perror("send to client");
+				//printf("Bad Client Send To FD:%d", connFd);
 			}
 		}
 	}

@@ -3,6 +3,7 @@
 	<name>Server</name>
 	<comment></comment>
 	<projects>
+		<project>ServiceIF</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
