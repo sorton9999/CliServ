@@ -134,15 +134,12 @@ void server_io::Start()
 				//std::cout << "Connection to FD: " + connFd << std::endl;
 				printf("%s%d\n", "Connection to FD:", connFd);
 			}
-			//pthread_t threadId = 0;
+			// We got a client connection.  Start a service thread for it.
 			if ((_parser != NULL) && _parser->StartThread(&connFd))
 			{
-				client_store.push_back(_parser->ThreadId());
+				//client_store.push_back(_parser->ThreadId());
+				cout << "Started Thread For Client: " << connFd << endl;
 			}
-			//if (_running && pthread_create(&threadId, NULL, server_io::ClientReadTask, &connFd) == 0)
-			//{
-			//	client_store.push_back(threadId);
-			//}
 
 			sleep(1);
 			// Send a ready out to the client
@@ -206,6 +203,8 @@ void server_io::Stop()
 void server_io::CleanUp()
 {
 	std::cout << "Cleaning up Server resources." << std::endl;
+	_parser->CleanUp();
+	/*
 	for (std::vector<pthread_t>::iterator iter = client_store.begin();
 		 iter != client_store.end();
 		 ++iter)
@@ -231,6 +230,7 @@ void server_io::CleanUp()
 		    }
         }
 	}
+	*/
 }
 
 /*

@@ -118,6 +118,28 @@ int main (int argc, char* argv[])
     // send stuff to server
     char input[256];
 
+    // Register a name with the server
+    string name;
+
+    cout << "Enter a Name: ";
+    cin >> name;
+
+    string sendName = "Name:" + name;
+    if (startTCP)
+    {
+    	if (write (listenFd, sendName.c_str(), sendName.length()) < 0)
+    	{
+    		perror ("Bad Name Register with TCP");
+    	}
+    }
+    else if (startUDP)
+    {
+    	if (udpService->SendMsg(sendName) < 0)
+    	{
+    		perror ("Bad Name Register with UDP");
+    	}
+    }
+
     // If we provided a file, use that as input
     // otherwise, allow manual entry
     if (inFile != NULL)
@@ -142,7 +164,7 @@ int main (int argc, char* argv[])
                 	string str(input);
                 	if (udpService->SendMsg(str) < 0)
                 	{
-                		perror("client udp write");
+                		perror("error client udp write");
                 	}
                 }
                 usleep(10000);

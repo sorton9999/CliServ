@@ -33,7 +33,7 @@ public:
 	static bool SignalSetup(void (*handler)(int));
 
 protected:
-	std::vector<pthread_t> client_store;
+	//std::vector<pthread_t> client_store;
 
 	server_io(int port, std::string host);
 
