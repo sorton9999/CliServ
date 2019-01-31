@@ -1,17 +1,15 @@
 #include <string.h>
 #include <cstring>
-//#include <unistd.h>
 #include <stdio.h>
-//#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-//#include <netinet/in.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
 #include <strings.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string>
 #include <time.h>
 #include <vector>
@@ -24,9 +22,16 @@ bool ServerReady(int fd);
 // Using TCP or UDP
 bool startTCP = false;
 bool startUDP = false;
+bool done = false;
+bool recvOnWire = false;
+
+pthread_t clientThread = 0;
 
 using namespace std;
 using namespace service_if;
+
+// Thread handler type declaration
+void* MyHandler (void*);
 
 /*
  * A very simple client application used to test out the server.  It just captures input from the
@@ -115,6 +120,11 @@ int main (int argc, char* argv[])
 
     cout << "Server is ready.  Continuing..." << endl;
 
+    if (pthread_create(&clientThread, NULL, MyHandler, &listenFd) < 0)
+    {
+    	perror ("Client thread creation error:");
+    }
+
     // send stuff to server
     char input[256];
 
@@ -154,9 +164,10 @@ int main (int argc, char* argv[])
                 cout << "Sending: [" << input << "]" << endl;
                 if (startTCP)
                 {
-					if (write(listenFd, input, len) < 0)
+					//if (write(listenFd, input, len) < 0)
+                	if (send (listenFd, (void*)input, len, MSG_DONTWAIT) < 0)
 					{
-						perror("client tcp write");
+						perror("client tcp send");
 					}
                 }
                 else if (startUDP)
@@ -173,6 +184,7 @@ int main (int argc, char* argv[])
         cout << "Contents End.  Sending Exit To Server.";
         write(listenFd, "exit", 4);
         inFile->close();
+        done = true;
     }
     else
     {
@@ -183,24 +195,44 @@ int main (int argc, char* argv[])
             bzero(input, 256);
             cin.getline(input, 256);
 
-            if (startTCP)
+            if (recvOnWire)
             {
-				if (write(listenFd, input, strlen(input)) < 0)
-				{
-					perror("client tcp write");
-				}
+            	cin.clear();
+            	recvOnWire = false;
             }
-            else if (startUDP)
+
+            if (strlen(input) > 0)
             {
-            	string str(input);
-            	if (udpService->SendMsg(str) < 0)
-            	{
-            		perror("client udp write");
-            	}
+				if (startTCP)
+				{
+					//if (write(listenFd, input, strlen(input)) < 0)
+					if (send (listenFd, (void*)input, strlen(input), MSG_DONTWAIT) < 0)
+					{
+						perror("client tcp write");
+					}
+				}
+				else if (startUDP)
+				{
+					string str(input);
+					if (udpService->SendMsg(str) < 0)
+					{
+						perror("client udp write");
+					}
+				}
             }
         }
     }
     cout << "Bye. Bye." << endl;
+    done = true;
+    char* msg = new char[256];
+    if (pthread_join (clientThread, (void**)&msg) < 0)
+    {
+    	pthread_kill (clientThread, 0);
+    }
+    else
+    {
+    	cout << msg << endl;
+    }
     close(listenFd);
     delete(inFile);
     delete(service);
@@ -237,4 +269,36 @@ bool ServerReady(int fd)
     return ready;
 }
 
+void* MyHandler(void* arg)
+{
+	int fd = *((int*)arg);
+	int result = -1;
+	fd_set readset;
+	struct timeval tv;
+	tv.tv_sec = 0;
+	tv.tv_usec = 10000;
+	FD_ZERO(&readset);
+	char buf[128];
+	int bufLen = strlen(buf);
+	memset((void*)&buf, 0, bufLen);
+	string str("This thread has ended");
 
+	printf ("Starting thread for FD: %d\n", fd);
+	while (!done)
+	{
+		FD_SET(fd, &readset);
+		result = select (fd + 1, &readset, NULL, NULL, &tv);
+		if (result > 0 && (FD_ISSET(fd, &readset) > 0) && !done)
+		{
+			int len = recv (fd, (void*)buf, 128, MSG_DONTWAIT);
+			if (len > 0)
+			{
+				printf("RECV : [%d]: %s\n", len, buf);
+				recvOnWire = true;
+			}
+			FD_CLR(fd, &readset);
+		}
+		memset((void*)&buf, 0, bufLen);
+	}
+	return (void*)str.c_str();
+}

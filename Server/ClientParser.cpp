@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #include "ClientParser.h"
 
@@ -113,10 +115,11 @@ void* ClientParser::ThreadReactor(void)
 		int result = select(clientFd + 1, &readset, NULL, NULL, &tv);
 		if (result > 0 && loop)
 		{
-			size_t rNum = read(clientFd, test, bufLen);
+			//size_t rNum = read(clientFd, test, bufLen);
+			int rNum = recv (clientFd, (void*)test, bufLen, MSG_DONTWAIT);
 
 			//std::cout << clientFd << ": [" << rNum << "]: " << test << std::endl;
-			printf("%d : [%lu]: %s\n", clientFd, rNum, test);
+			printf("%d : [%d]: %s\n", clientFd, rNum, test);
 
 			if (string(test).compare(0, 4, "exit") == 0)
             {
@@ -155,10 +158,12 @@ void* ClientParser::ThreadReactor(void)
 							int cLen = 0;
 							while (cLen < tLen)
 							{
-								wLen = write (tellData->second.ClientHandle, (void*)actor.c_str(), tLen - cLen);
+								int fd = (int)tellData->second.ClientFd;
+								printf ("Sending to FD: %d\n", fd);
+								wLen = send (fd, (void*)actor.c_str(), tLen - cLen, MSG_DONTWAIT);
 								if (wLen < 0)
 								{
-									perror ("client write failure");
+									perror ("client send failure");
 									break;
 								}
 								else
