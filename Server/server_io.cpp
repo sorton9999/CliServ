@@ -170,6 +170,8 @@ void server_io::StartUdpService()
 		{
 			string msg = _udpService->GetMsg();
 			cout << "Msg: " << msg << endl;
+
+			_udpService->SendMsg(msg);
 		}
 	}
 }
