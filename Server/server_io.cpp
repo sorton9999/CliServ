@@ -76,7 +76,7 @@ bool server_io::SetupSocket(void)
 {
 	if (_service == NULL)
 	{
-		_service = new service_if::TcpService(service_if::TcpService::CONN_SERVER, "", _portId);
+		_service = new service_if::TcpService(service_if::TcpService::CONN_SERVER, _hostname, _portId);
 	}
 	_running = _service->SetupSocket();
 	return _running;

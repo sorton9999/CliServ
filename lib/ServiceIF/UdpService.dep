@@ -1,1 +1,0 @@
-UdpService.o: UdpService.cpp UdpService.h ServiceIF.h

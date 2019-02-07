@@ -20,8 +20,10 @@ namespace service_if {
 	TcpService::TcpService(ConnectionTypeEnum type, const string& hostname, const int port)
 	:
 			ServiceIF(),
-			_hostname(hostname), _portId(port), _type(type), _listenFd(0), _looprun(false)
+			_server(NULL), _type(type), _listenFd(0), _looprun(false)
 	{
+		_hostname = hostname;
+		_portId = port;
 	}
 
 	TcpService::~TcpService()
@@ -70,24 +72,33 @@ namespace service_if {
 		memset((void*) &_servAdd, 0, sizeof(_servAdd));
 		_servAdd.sin_family = AF_INET;
 		_servAdd.sin_port = htons (_portId);
-		//_servAdd.sin_addr.s_addr = INADDR_ANY;
 
 		const char* hostname = NULL;
 		if (_hostname.length() == 0)
 		{
 			hostname = "localhost";
 		}
-		else
+		else if (_hostname == "localhost")
 		{
 			hostname = _hostname.c_str();
 		}
-		hostinfo = gethostbyname (hostname);
-		if (hostinfo == NULL)
+		else
 		{
-		  fprintf (stderr, "Unknown host %s.\n", hostname);
-		  return false;
+			_servAdd.sin_addr.s_addr = INADDR_ANY;
+			cout << "Connection from Anybody set up" << endl;
 		}
-		_servAdd.sin_addr = *(struct in_addr *) hostinfo->h_addr;
+
+		if ((hostname != NULL) && (strcmp(hostname, "localhost") == 0))
+		{
+			hostinfo = gethostbyname (hostname);
+			if (hostinfo == NULL)
+			{
+			  fprintf (stderr, "Unknown host %s.\n", hostname);
+			  return false;
+			}
+			_servAdd.sin_addr = *(struct in_addr *) hostinfo->h_addr;
+			cout << "Connection from localhost only set up" << endl;
+		}
 
 		// Bind socket
 		if (bind(_listenFd, (struct sockaddr*)&_servAdd, sizeof(_servAdd)) < 0)
@@ -143,6 +154,24 @@ namespace service_if {
 			cerr << "Host does not exist" << endl;
 			return false;
 		}
+		else
+		{
+			printf("\nhost name alias list:\n");
+			for (int i = 0; _server->h_aliases[i]; ++i)
+			{
+				printf("%s\n", _server->h_aliases[i]);
+			}
+
+			printf("\nip address list:\n");
+			char ip[16];
+			struct sockaddr_in sock_addr;
+			for (int i = 0; _server->h_addr_list[i]; ++i)
+			{
+				sock_addr.sin_addr = *((struct in_addr*) _server->h_addr_list[i]);
+				inet_ntop(AF_INET, &sock_addr.sin_addr, ip, sizeof(ip));
+				printf("%s\n", ip);
+			}
+		}
 
 
 		return true;
@@ -162,11 +191,10 @@ namespace service_if {
 
 		_servAdd.sin_port = htons(_portId);
 
-		int connVal = connect(_listenFd,(struct sockaddr *) &_servAdd, sizeof(_servAdd));
-
-		if (connVal < 0)
+		if (connect(_listenFd,(struct sockaddr *) &_servAdd, sizeof(_servAdd)) < 0)
 		{
-			cerr << "Cannot connect!  No Server?" << endl;
+			perror("client connect error");
+			cerr << "Cannot connect!  No Server at " << _server->h_addr << endl;
 			return false;
 		}
 
