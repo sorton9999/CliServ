@@ -27,8 +27,10 @@ public:
 	UdpService(ConnectionTypeEnum type, const std::string& hostname, const int port);
 	virtual ~UdpService();
 
-	virtual int SendMsg(std::string message);
-	virtual std::string GetMsg();
+	virtual int   SendMsg(std::string message);
+	virtual int   SendMsg(int fd, std::string msg, unsigned int flags);
+	virtual int GetMsg(char** msgRef, unsigned long bufLen);
+	virtual int GetMsg(int fd, char** msgRef, unsigned long bufLen, unsigned int flags);
 
 	bool SetupSocket();
 	int ServiceLoop(struct timeval* looptime);

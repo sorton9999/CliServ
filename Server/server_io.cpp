@@ -131,23 +131,19 @@ void server_io::Start()
 			}
 			else
 			{
-				//std::cout << "Connection to FD: " + connFd << std::endl;
 				printf("%s%d\n", "Connection to FD:", connFd);
 			}
 			// We got a client connection.  Start a service thread for it.
 			if ((_parser != NULL) && _parser->StartThread(&connFd))
 			{
-				//client_store.push_back(_parser->ThreadId());
 				cout << "Started Thread For Client: " << connFd << endl;
 			}
 
 			sleep(1);
 			// Send a ready out to the client
-			if (send (connFd, "READY", 5, 0) < 0)
-			//if (_service->SendMsg("READY") < 0)
+			if (_service->SendMsg(connFd, "READY", 0) < 0)
 			{
-				perror("send to client");
-				//printf("Bad Client Send To FD:%d", connFd);
+				printf("Bad Client Send To FD:%d", connFd);
 			}
 		}
 	}
@@ -168,12 +164,26 @@ void server_io::StartUdpService()
 		result = _udpService->ServiceLoop(&tv);
 		if (result > 0)
 		{
-			string msg = _udpService->GetMsg();
-			cout << "Msg: " << msg << endl;
+			char* msg = new char(256);
+			int num = _udpService->GetMsg(&msg, 256);
+			cout << "Msg: " << msg << "; Size: " << num << endl;
 
 			_udpService->SendMsg(msg);
+
+			delete[] msg;
+			msg = NULL;
 		}
 	}
+}
+
+int server_io::SendMsg(int fd, std::string msg, unsigned int flags)
+{
+	return _service->SendMsg(fd, msg, flags);
+}
+
+int server_io::GetMsg(int fd, char** msg, unsigned long len, unsigned int flags)
+{
+	return _service->GetMsg(fd, msg, len, flags);
 }
 
 /*
@@ -205,34 +215,10 @@ void server_io::Stop()
 void server_io::CleanUp()
 {
 	std::cout << "Cleaning up Server resources." << std::endl;
-	_parser->CleanUp();
-	/*
-	for (std::vector<pthread_t>::iterator iter = client_store.begin();
-		 iter != client_store.end();
-		 ++iter)
+	if (_parser != NULL)
 	{
-		char* msg = NULL;
-        bool killThread = false;
-		//if (pthread_join(*iter, (void**)&msg))
-        if (_parser->WaitForThread((void**)&msg))
-		{
-			perror("pthread_join");
-            killThread = true;
-		}
-		std::cout << msg << std::endl;
-		delete msg;
-
-        if (killThread)
-        {
-		    std::cout << "Killing Thread: " << *iter << std::endl;
-		    //if (pthread_kill(*iter, 0) == 0)
-		    if (_parser->KillThread())
-		    {
-			    std::cout << "\n\tKilled." << std::endl;
-		    }
-        }
+		_parser->CleanUp();
 	}
-	*/
 }
 
 /*
@@ -267,57 +253,3 @@ bool server_io::SignalSetup(void (*handler)(int))
 	}
 	return true;
 }
-
-/*
- * ClientReadTask -- The client thread processing method.  In the loop two flags are
- *                   checked.  A local flag that gets set to FALSE when the client
- *                   send an 'exit' command and a class level flag that is set to
- *                   FALSE when the server is stopping.  A 'select' is set up to
- *                   detect when something is coming in the the client FD.  When
- *                   something comes in, a 'read' is done to get what comes in.  The
- *                   string is just echoed out to STDOUT.
- * INPUTS: void* -- A pointer to input args which needs to be cast to its real type. In
- *                  this case, the client connection FD.
- * OUPUTS: VOID
- * RETURN: void* -- Any return needed to be sent to the caller.  In this case, a message
- *                  string.
- */
-void* server_io::ClientReadTask(void* arg)
-{
-	int clientFd = *((int*)arg);
-	pthread_t myId = pthread_self();
-	std::cout << "Start Thread No: " << myId << std::endl;
-	char test[300];
-    size_t bufLen = sizeof(test);
-	memset((void*)&test, 0, bufLen);
-	bool lloop = true;
-	fd_set readset;
-	struct timeval tv;
-	FD_ZERO(&readset);
-	while (_loop && lloop)
-	{
-		FD_SET(clientFd, &readset);
-		tv.tv_sec = 0;
-		tv.tv_usec = 10000;
-		int result = select(clientFd + 1, &readset, NULL, NULL, &tv);
-		if (result > 0 && _loop && lloop)
-		{
-			size_t rNum = read(clientFd, test, bufLen);
-
-			//std::cout << clientFd << ": [" << rNum << "]: " << test << std::endl;
-			printf("%d : [%d]: %s\n", clientFd, rNum, test);
-
-			if (std::string(test).compare(0, 4, "exit") == 0)
-            {
-                std::cout << ">>>> Received EXIT From Client: " << clientFd << std::endl;
-				lloop = false;
-            }
-			memset((void*)&test, 0, bufLen);
-		}
-	}
-	close(clientFd);
-	char *msg = new char[100];
-	sprintf(msg, "Closing Thread No: %lu, Client FD: %d", myId, clientFd);
-	return msg;
-}
-

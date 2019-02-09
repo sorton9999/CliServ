@@ -32,14 +32,57 @@ namespace service_if {
 
 	int TcpService::SendMsg(string msg)
 	{
-		return send (_listenFd, (void*)msg.c_str(), msg.length(), 0);
+		int retVal = -1;
+		if ((retVal =  send (_listenFd, (void*)msg.c_str(), msg.length(), 0)) < 0)
+		{
+			perror ("send to client");
+		}
+		return retVal;
 	}
 
-	string TcpService::GetMsg(void)
+	int TcpService::SendMsg(int fd, string msg, unsigned int flags)
 	{
-		string retStr("");
+		int retVal = -1;
+		int wLen = 0;
+		int tLen = msg.length();
+		char* start = &(msg[0]);
+		char* end = &(msg[tLen]);
+		while (start < end)
+		{
+			printf ("Sending to FD: %d; Size: [%d]\n", fd, tLen);
+			// typical flag might be MSG_DONTWAIT, otherwise 0 for no flags
+			wLen = send (fd, (void*)start, (end - start), flags);
+			if (wLen < 0)
+			{
+				perror ("client send failure");
+				break;
+			}
+			else
+			{
+				printf ("Sent to FD: %d [%d] bytes\n", fd, wLen);
+				start = &(msg[wLen]);
+			}
+		}
+		return retVal;
+	}
 
-		return retStr;
+	int TcpService::GetMsg(char** msgRef, unsigned long bufLen)
+	{
+		return (GetMsg (_listenFd, msgRef, bufLen, 0));
+	}
+
+	int TcpService::GetMsg(int fd, char** msgRef, unsigned long bufLen, unsigned int flags)
+	{
+		int rNum = -1;
+		if ((rNum = recv (fd, (void*)(*msgRef), bufLen, flags)) < 0)
+		{
+			perror ("recv from client error");
+		}
+		if (rNum >= 0)
+		{
+			(*msgRef)[rNum] = '\0';
+		}
+		return rNum;
 	}
 
 	bool TcpService::SetupSocket()

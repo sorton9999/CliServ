@@ -23,7 +23,6 @@ bool ServerReady(int fd);
 bool startTCP = false;
 bool startUDP = false;
 bool done = false;
-bool recvOnWire = false;
 
 pthread_t clientThread = 0;
 
@@ -126,12 +125,12 @@ int main (int argc, char* argv[])
     }
 
     // send stuff to server
-    char input[256];
+    char input[256] = { 0 };
 
     // Register a name with the server
     string name;
 
-    cout << "Enter a Name: ";
+    cout << "Enter a Name: " << flush;
     cin >> name;
 
     string sendName = "Name:" + name;
@@ -191,15 +190,10 @@ int main (int argc, char* argv[])
         // Manual entry
         while(strcmp(input, "exit") != 0)
         {
-            cout << "Enter stuff: ";
+            cout << "Enter stuff: " << flush;
             bzero(input, 256);
-            cin.getline(input, 256);
-
-            if (recvOnWire)
-            {
-            	cin.clear();
-            	recvOnWire = false;
-            }
+            while (input[0] == '\0')
+            	cin.getline(input, 256, '\n');
 
             if (strlen(input) > 0)
             {
@@ -253,7 +247,7 @@ bool ServerReady(int fd)
     }
 
     char buf[100];
-    if (recv(fd, buf, 100, 0) < 0)
+    if (recv(fd, buf, 100, MSG_DONTWAIT) < 0)
     {
         perror ("recv from server");
         sleep(100);
@@ -291,10 +285,10 @@ void* MyHandler(void* arg)
 		if (result > 0 && (FD_ISSET(fd, &readset) > 0) && !done)
 		{
 			int len = recv (fd, (void*)buf, 128, MSG_DONTWAIT);
+			buf[len] = '\0';
 			if (len > 0)
 			{
 				printf("RECV : [%d]: %s\n", len, buf);
-				recvOnWire = true;
 			}
 			FD_CLR(fd, &readset);
 		}

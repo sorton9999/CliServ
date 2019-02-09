@@ -35,8 +35,10 @@ public:
 
 	TcpService(ConnectionTypeEnum type, const std::string& hostname, const int port);
 	virtual ~TcpService();
-	virtual int SendMsg(std::string msg);
-	virtual std::string GetMsg(void);
+	virtual int   SendMsg(std::string msg);
+	virtual int   SendMsg(int fd, std::string msg, unsigned int flags);
+	virtual int GetMsg(char** msgRef, unsigned long bufLen);
+	virtual int GetMsg(int fd, char** msgRef, unsigned long bufLen, unsigned int flags);
 
 	bool SetupSocket();
 	int  AcceptConnection(struct sockaddr*& clientAddress);

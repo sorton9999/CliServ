@@ -9,7 +9,6 @@
 #define SERVICEIF_H_
 
 #include <stdlib.h>
-#include <stdio.h>
 #include <iostream>
 #include <cstdio>
 
@@ -21,7 +20,9 @@ class ServiceIF {
 public:
 	virtual ~ServiceIF() {}
 	virtual int SendMsg(std::string msg) = 0;
-	virtual std::string GetMsg(void) = 0;
+	virtual int SendMsg(int fd, std::string msg, unsigned int flags) = 0;
+	virtual int GetMsg(char** msgRef, unsigned long bufLen) = 0;
+	virtual int GetMsg(int fd, char** msgRef, unsigned long bufLen, unsigned int flags) = 0;
 };
 
 } /* namespace service_if */

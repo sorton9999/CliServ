@@ -64,17 +64,6 @@ namespace service_if
 	    {
 			if (retVal && _listenFd > 0)
 			{
-				/*
-				memset( (void*)&_servAdd, 0, sizeof(_servAdd) );
-				// Fill in server information
-				_servAdd.sin_family    = AF_INET;
-				_servAdd.sin_addr.s_addr = INADDR_ANY;
-				_servAdd.sin_port = htons(_portId);
-
-				// Bind the socket with the server address
-				if ( bind(_listenFd, (const struct sockaddr *)&_servAdd,
-					 sizeof(_servAdd)) < 0 )
-					 */
 				if ( bind(_listenFd, _addrinfo->ai_addr, _addrinfo->ai_addrlen) < 0)
 				{
 					perror("bind failed");
@@ -88,29 +77,52 @@ namespace service_if
 		return retVal;
 	}
 
-	std::string UdpService::GetMsg()
+	int UdpService::GetMsg(char** msgRef, unsigned long bufLen)
 	{
-		std::string str = "";
 		if (_connType != CONN_SERVER)
 		{
-			return str;
+			return -1;
 		}
-		char buf[1024];
-		_numBytesRecv = recv(_listenFd, buf, 1024, 0);
-		buf[_numBytesRecv] = '\0';
-		str = buf;
-		return str;
+		return GetMsg(_listenFd, msgRef, bufLen, 0);
+	}
+
+	int UdpService::GetMsg(int fd, char** msgRef, unsigned long bufLen, unsigned int flags)
+	{
+		int rNum = -1;
+		if ((rNum = recv (fd, (void*)*msgRef, bufLen, flags)) < 0)
+		{
+			perror ("client recv error");
+		}
+		if (rNum >= 0)
+		{
+			(*msgRef)[rNum] = '\0';
+		}
+		_numBytesRecv = rNum;
+		return rNum;
 	}
 
 	int UdpService::SendMsg(std::string message)
 	{
+		int retVal = -1;
 		if (_connType != CONN_CLIENT)
 		{
 			_msgSizeSent = 0;
 			return 0;
 		}
-		_msgSizeSent = sendto(_listenFd, message.c_str(), message.length(), 0, _addrinfo->ai_addr, _addrinfo->ai_addrlen);
-		return _msgSizeSent;
+		_msgSizeSent = 0;
+		if ((retVal = sendto(_listenFd, message.c_str(), message.length(), 0, _addrinfo->ai_addr, _addrinfo->ai_addrlen)) < 0)
+		{
+			perror ("sendto client error");
+		}
+		_msgSizeSent = retVal;
+		return retVal;
+	}
+
+	int UdpService::SendMsg(int fd, std::string msg, unsigned int flags)
+	{
+		int retVal = -1;
+
+		return retVal;
 	}
 
 	int UdpService::ServiceLoop(struct timeval* looptime)

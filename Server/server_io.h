@@ -26,20 +26,16 @@ public:
 	void Stop();
 	void CleanUp();
 
-	bool SetupUdpService();
-	void StartUdpService();
+	bool   SetupUdpService();
+	void   StartUdpService();
+	int    SendMsg(int fd, std::string msg, unsigned int flags);
+	int    GetMsg(int fd, char** msg, unsigned long len, unsigned int flags);
 
-	static void* ClientReadTask(void* arg);
 	static bool SignalSetup(void (*handler)(int));
 
 protected:
-	//std::vector<pthread_t> client_store;
 
 	server_io(int port, std::string host);
-
-	//bool SetupUdpSocket();
-
-	static void ClientHandler(int signum);
 
 private:
 

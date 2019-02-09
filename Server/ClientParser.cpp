@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 
 #include "ClientParser.h"
+#include "server_io.h"
 
 using namespace std;
 
@@ -115,10 +116,8 @@ void* ClientParser::ThreadReactor(void)
 		int result = select(clientFd + 1, &readset, NULL, NULL, &tv);
 		if (result > 0 && loop)
 		{
-			//size_t rNum = read(clientFd, test, bufLen);
 			int rNum = recv (clientFd, (void*)test, bufLen, MSG_DONTWAIT);
 
-			//std::cout << clientFd << ": [" << rNum << "]: " << test << std::endl;
 			printf("%d : [%d]: %s\n", clientFd, rNum, test);
 
 			if (string(test).compare(0, 4, "exit") == 0)
@@ -153,25 +152,13 @@ void* ClientParser::ThreadReactor(void)
 						ClientIter tellData = FindClientByName(cmd);
 						if (tellData != client_store.end())
 						{
-							int wLen = 0;
-							int tLen = actor.length();
-							int cLen = 0;
-							while (cLen < tLen)
+							string msg = theData->second.ClientName + " says " + actor;
+							int fd = (int)tellData->second.ClientFd;
+							// Args to Instance are dummy.  We should have a valid server object by now
+							if (server_io::Instance(0, "")->SendMsg(fd, msg, MSG_DONTWAIT) > 0)
 							{
-								int fd = (int)tellData->second.ClientFd;
-								printf ("Sending to FD: %d\n", fd);
-								wLen = send (fd, (void*)actor.c_str(), tLen - cLen, MSG_DONTWAIT);
-								if (wLen < 0)
-								{
-									perror ("client send failure");
-									break;
-								}
-								else
-								{
-									cLen += wLen;
-								}
+								cout << "Sent [" << actor << "] to [" << cmd << "]" << endl;
 							}
-							cout << "Sent [" << actor << "] to [" << cmd << "]" << endl;
 						}
 						else
 						{
