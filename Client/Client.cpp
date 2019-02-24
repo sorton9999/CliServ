@@ -17,12 +17,14 @@
 #include <TcpService.h>
 #include <UdpService.h>
 
+bool SignalSetup(void (*handler)(int));
 bool ServerReady(int fd);
 
 // Using TCP or UDP
 bool startTCP = false;
 bool startUDP = false;
 bool done = false;
+char input[256];
 
 pthread_t clientThread = 0;
 
@@ -31,6 +33,17 @@ using namespace service_if;
 
 // Thread handler type declaration
 void* MyHandler (void*);
+
+
+static void my_sig_handler(int sig_num)
+{
+	if (sig_num == SIGINT || sig_num == SIGTERM)
+	{
+		done = true;
+		input[0] = '\n';
+	}
+}
+
 
 /*
  * A very simple client application used to test out the server.  It just captures input from the
@@ -41,11 +54,18 @@ int main (int argc, char* argv[])
     int portNo = 0;
     fstream* inFile = NULL;
     bool connected = false;
+	int retVal = TcpService::EXIT_SUCCES;
+
+	if (!SignalSetup(my_sig_handler))
+	{
+		cerr << "Signals not set up correctly\n";
+		return TcpService::EXIT_FAIL;
+	}
 
     if(argc < 4)
     {
         cerr<<"Usage : ./client <host name> <port> <-T|-U> [read file]"<<endl;
-        return -1;
+        return TcpService::EXIT_FAIL;
     }
 
     portNo = atoi(argv[2]);
@@ -53,7 +73,7 @@ int main (int argc, char* argv[])
     if((portNo > 65535) || (portNo < 2000))
     {
         cerr << "Enter a port number between 2000 - 65535" << endl;
-        return -1;
+        return TcpService::EXIT_FAIL;
     }
 
     if (strcmp(argv[3], "-T") == 0)
@@ -115,17 +135,18 @@ int main (int argc, char* argv[])
     {
     	listenFd = udpService->ListenFd();
     }
-    while (!ServerReady(listenFd));
+    while (!done && !ServerReady(listenFd));
 
     cout << "Server is ready.  Continuing..." << endl;
 
     if (pthread_create(&clientThread, NULL, MyHandler, &listenFd) < 0)
     {
     	perror ("Client thread creation error:");
+    	retVal = TcpService::EXIT_FAIL;
     }
 
     // send stuff to server
-    char input[256] = { 0 };
+    input[256] = { 0 };
 
     // Register a name with the server
     string name;
@@ -139,6 +160,7 @@ int main (int argc, char* argv[])
     	if (write (listenFd, sendName.c_str(), sendName.length()) < 0)
     	{
     		perror ("Bad Name Register with TCP");
+        	retVal = TcpService::EXIT_FAIL;
     	}
     }
     else if (startUDP)
@@ -146,6 +168,7 @@ int main (int argc, char* argv[])
     	if (udpService->SendMsg(sendName) < 0)
     	{
     		perror ("Bad Name Register with UDP");
+        	retVal = TcpService::EXIT_FAIL;
     	}
     }
 
@@ -188,7 +211,7 @@ int main (int argc, char* argv[])
     else
     {
         // Manual entry
-        while(strcmp(input, "exit") != 0)
+        while((strcmp(input, "exit") != 0) && !done)
         {
             cout << "Enter stuff: " << flush;
             bzero(input, 256);
@@ -230,6 +253,7 @@ int main (int argc, char* argv[])
     close(listenFd);
     delete(inFile);
     delete(service);
+    return retVal;
 }
 
 bool ServerReady(int fd)
@@ -247,7 +271,7 @@ bool ServerReady(int fd)
     }
 
     char buf[100];
-    if (recv(fd, buf, 100, MSG_DONTWAIT) < 0)
+    if (recv(fd, buf, 100, 0) < 0)
     {
         perror ("recv from server");
         sleep(100);
@@ -294,5 +318,33 @@ void* MyHandler(void* arg)
 		}
 		memset((void*)&buf, 0, bufLen);
 	}
+	// Attempt to send an exit to server
+	printf ("Exited Recv Loop. Sending EXIT to Server");
+	send (fd, "exit", 4, MSG_DONTWAIT);
 	return (void*)str.c_str();
 }
+
+bool SignalSetup(void (*handler)(int))
+{
+	struct sigaction sa;
+
+	memset(&sa, 0, sizeof(struct sigaction));
+	sigset_t mask;
+
+	sigemptyset(&mask);
+	sa.sa_mask = mask;
+	sa.sa_handler = handler;
+	if (sigaction(SIGINT, &sa, NULL) < 0)
+	{
+		perror("sigaction");
+		return false;
+	}
+	if (sigaction(SIGTERM, &sa, NULL) < 0)
+	{
+		perror("sigaction");
+		return false;
+	}
+	return true;
+}
+
+

@@ -187,35 +187,49 @@ namespace service_if {
 		if(_listenFd < 0)
 		{
 			cerr << "Cannot open socket" << endl;
-			return -1;
-		}
-
-		_server = gethostbyname(_hostname.c_str());
-
-		if(_server == NULL)
-		{
-			cerr << "Host does not exist" << endl;
 			return false;
 		}
-		else
+
+		_servAdd.sin_family = AF_INET;
+		_servAdd.sin_port = htons(_portId);
+
+		// Check for hostname or IP
+		if (inet_addr(_hostname.c_str()) == -1)
 		{
-			printf("\nhost name alias list:\n");
-			for (int i = 0; _server->h_aliases[i]; ++i)
+			// We got a hostname
+
+			struct hostent* he;
+			struct in_addr** addr_list;
+
+			if ( (he = gethostbyname(_hostname.c_str()) ) == NULL)
 			{
-				printf("%s\n", _server->h_aliases[i]);
+				perror ("get host error");
+				return false;
 			}
+			printf("\nhost name alias list:\n");
+			for (int i = 0; he->h_aliases[i] != NULL; ++i)
+			{
+				printf("%s\n", he->h_aliases[i]);
+			}
+
+			addr_list = (struct in_addr**) he->h_addr_list;
 
 			printf("\nip address list:\n");
 			char ip[16];
-			struct sockaddr_in sock_addr;
-			for (int i = 0; _server->h_addr_list[i]; ++i)
+			for (int i = 0; addr_list[i] != NULL; ++i)
 			{
-				sock_addr.sin_addr = *((struct in_addr*) _server->h_addr_list[i]);
-				inet_ntop(AF_INET, &sock_addr.sin_addr, ip, sizeof(ip));
-				printf("%s\n", ip);
+				_servAdd.sin_addr = *(addr_list[i]);
+				inet_ntop(AF_INET, &_servAdd.sin_addr, ip, sizeof(ip));
+				printf ("%s resolved to %s", _hostname.c_str(), ip);
+				break;
 			}
 		}
-
+		else
+		{
+			// We got a dotted IP address
+			_servAdd.sin_addr.s_addr = inet_addr(_hostname.c_str());
+			cout << "Registered IP address: " << _hostname << endl;
+		}
 
 		return true;
 	}
@@ -227,17 +241,11 @@ namespace service_if {
 		{
 			return false;
 		}
-		bzero((char *) &_servAdd, sizeof(_servAdd));
-		_servAdd.sin_family = AF_INET;
-
-		bcopy((char *) _server -> h_addr, (char *) &_servAdd.sin_addr.s_addr, _server -> h_length);
-
-		_servAdd.sin_port = htons(_portId);
 
 		if (connect(_listenFd,(struct sockaddr *) &_servAdd, sizeof(_servAdd)) < 0)
 		{
 			perror("client connect error");
-			cerr << "Cannot connect!  No Server at " << _server->h_addr << endl;
+			cerr << "Cannot connect!  No Server at " << _servAdd.sin_addr.s_addr << endl;
 			return false;
 		}
 
