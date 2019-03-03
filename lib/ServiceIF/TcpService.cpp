@@ -189,12 +189,15 @@ namespace service_if {
 			cerr << "Cannot open socket" << endl;
 			return false;
 		}
-
+		bzero((char *) &_servAdd, sizeof(_servAdd));
 		_servAdd.sin_family = AF_INET;
 		_servAdd.sin_port = htons(_portId);
 
 		// Check for hostname or IP
-		if (inet_addr(_hostname.c_str()) == -1)
+		// If this call returns an error, a dotted IP
+		// address wasn't given so we continue inside
+		// the 'if'
+		if (inet_addr(_hostname.c_str()) == INADDR_NONE)
 		{
 			// We got a hostname
 
